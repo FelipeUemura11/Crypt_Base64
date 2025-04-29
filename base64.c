@@ -159,10 +159,112 @@ char* decodificarBase64(const char* texto) {
     return resultado;
 }
 
+// Função para codificar dados binários em Base64
+char* codificarBase64Binario(const unsigned char* dados, size_t len) {
+    // Calcula o tamanho necessário para o resultado (4 caracteres para cada 3 bytes + padding)
+    int resultado_len = ((len + 2) / 3) * 4 + 1;  // +1 para o caracter nulo
+    char* resultado = (char*)malloc(resultado_len);
+    if (!resultado) {
+        printf("Erro: Falha na alocação de memória\n");
+        return NULL;
+    }
+    
+    int pos = 0;
+    char base64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    
+    // Processa os dados em grupos de 3 bytes
+    for(size_t i = 0; i < len; i += 3) {
+        int bytes[4][6]; // matriz 4x6(4 grupos de 6 bits)
+        unsigned char byte1 = dados[i];
+        unsigned char byte2 = (i + 1 < len) ? dados[i + 1] : 0; // byte = 0 caso o grupo tenha numero impar de bytes
+        unsigned char byte3 = (i + 2 < len) ? dados[i + 2] : 0; // byte = 0 caso o grupo tenha numero impar de bytes
+        
+        bitsByteSeparados(byte1, byte2, byte3, bytes);
+        
+        // Converte cada 4 grupos de 6 bits em um caractere Base64
+        for(int j = 0; j < 4; j++) {
+            // caso o grupo tenha - que 3 bytes de entrada - que 4 bytes de saida
+            if (j == 3 && i + 2 >= len) {
+                resultado[pos++] = '=';
+            } else if (j == 2 && i + 1 >= len) {
+                resultado[pos++] = '=';
+            } else {
+                int valor = calcularSomaByte(bytes[j]);
+                resultado[pos++] = base64[valor];
+            }
+        }
+    }
+    resultado[pos] = '\0';
+    return resultado;
+}
+
+int transmissaoJSON(){
+    char nome_arquivo[256];
+    char caminho_completo[512];
+
+    printf("Digite o nome do arquivo: ");
+    if (scanf("%255s", nome_arquivo) != 1) {
+        printf("Erro: Falha ao ler o nome do arquivo\n");
+        return 1;
+    }
+    getchar(); // Limpa o buffer após o scanf
+
+    // Constrói o caminho completo do arquivo
+    snprintf(caminho_completo, sizeof(caminho_completo), "./Imagem/%s.png", nome_arquivo);
+
+    FILE* arquivo = fopen(caminho_completo, "rb");
+
+    if(!arquivo){
+        printf("Erro: Falha ao abrir o arquivo %s\n", caminho_completo);
+        return 1;
+    }
+
+    fseek(arquivo, 0, SEEK_END);
+    long tamanho_arquivo = ftell(arquivo);
+    rewind(arquivo); // volta para o inicio do arquivo
+
+    // tipo de 'indice' para o ler o arquivo
+    unsigned char* buffer = (unsigned char*)malloc(tamanho_arquivo);
+    if(!buffer){
+        printf("Erro: Falha ao alocar memoria\n");
+        fclose(arquivo);
+        return 1;
+    }
+    
+    size_t bytes_lidos = fread(buffer, 1, tamanho_arquivo, arquivo);
+    if (bytes_lidos != tamanho_arquivo) {
+        printf("Erro: Falha ao ler o arquivo completamente\n");
+        free(buffer);
+        fclose(arquivo);
+        return 1;
+    }
+
+    // codifica o buffer em base64
+    char* base64 = codificarBase64Binario(buffer, tamanho_arquivo);
+    free(buffer);
+
+    if(!base64){
+        fprintf(stderr, "Erro: Falha ao codificar o arquivo em Base64\n");
+        fclose(arquivo);
+        return 1;
+    }
+
+    // cria o JSON
+    printf("{\n");
+    printf("\"nome_arquivo\": \"%s\",\n", nome_arquivo);
+    printf("\"tamanho\": %ld,\n", tamanho_arquivo);
+    printf("\"base64\": \"%s\"\n", base64);
+    printf("}\n");
+    
+    free(base64);
+    fclose(arquivo);
+
+    return 0;   
+}
+
 int main() {
     size_t tamanho = 0;
     char* texto = NULL;
-    char* nome_arquivo = NULL;
     int opc = -1;
 
     while(opc != 0){
@@ -207,10 +309,7 @@ int main() {
                 }
                 break;
             case 3: 
-                printf("Digite o nome do arquivo para transmissao p/ JSON: ");
-                scanf("%s", nome_arquivo);
-
-                // transmissaoJSON(nome_arquivo);
+                transmissaoJSON();
                 break;
             case 0:
                 printf("Saindo...\n");
